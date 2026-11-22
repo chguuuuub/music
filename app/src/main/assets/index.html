@@ -34,7 +34,7 @@ const selected=[...document.querySelectorAll('#instruments input:checked')].map(
 if(!selected.length){$('status').textContent='至少选择一种乐器。';return}
 if(selected.includes('piano')){let e=[];for(let s=0;s<steps;s+=2){let c=chords[Math.floor(s/8)]||0;for(let k of [0,2,4])e.push({n:48+base+c+sc[k],t:s*.5,d:.85,v:.12})}add('piano',e)}
 if(selected.includes('strings')){let e=[];for(let s=0;s<steps;s+=8){let c=chords[Math.floor(s/8)]||0;e.push({n:60+base+c+sc[2],t:s*.5,d:3.7,v:.095})}add('strings',e)}
-if(selected.includes('flute')||selected.includes('bell')){let e=[];let pos=0;while(pos<steps){let degree=Math.floor(r()*sc.length),oct=mood==='epic'?12:12;e.push({n:72+base+sc[degree]+oct*(r()>.84?1:0),t:pos*.5,d:.35+r()*.45,v:.12});pos+=r()>.72?2:1}if(selected.includes('flute'))add('flute',e);else add('bell',e)}
+if(selected.includes('flute')||selected.includes('bell')){let e=[];let pos=0;while(pos<steps){let degree=Math.floor(r()*sc.length),oct=12;e.push({n:72+base+sc[degree]+oct*(r()>.84?1:0),t:pos*.5,d:.35+r()*.45,v:.12});pos+=r()>.72?2:1}if(selected.includes('flute'))add('flute',e);if(selected.includes('bell'))add('bell',e.map(x=>({...x,n:x.n+12,t:x.t+.12,d:x.d*.75,v:x.v*.7})))}
 if(selected.includes('guitar')){let e=[];for(let s=0;s<steps;s+=2){let c=chords[Math.floor(s/8)]||0;e.push({n:55+base+c+sc[Math.floor(r()*3)],t:s*.5,d:.42,v:.10})}add('guitar',e)}
 if(selected.includes('bass')){let e=[];for(let s=0;s<steps;s+=4){let c=chords[Math.floor(s/8)]||0;e.push({n:36+base+c,t:s*.5,d:1.6,v:.16})}add('bass',e)}
 if(selected.includes('pad')){let e=[];for(let s=0;s<steps;s+=8){let c=chords[Math.floor(s/8)]||0;for(let k of [0,2,4])e.push({n:48+base+c+sc[k],t:s*.5,d:3.8,v:.045})}add('pad',e)}
@@ -93,10 +93,22 @@ function voice(c,inst,n,t,d,v){
 function stop(){active.forEach(x=>{try{x.stop()}catch(e){}});active=[];playing=false;pausedAt=0;$('progress').style.width='0%'}
 function play(){if(!song){$('status').textContent='请先生成音乐。';return}stop();let c=setup();master=c.createGain();master.gain.value=.75;master.connect(c.destination);let start=c.currentTime+.08; song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=Date.now();$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
 function pause(){if(playing){stop();$('status').textContent='播放已暂停（点击播放可从头开始）。'}}
-function renderWav(){
-if(!song)return Promise.reject(Error('请先生成音乐'));const sr=44100,len=Math.ceil(song.duration*sr),mix=new Float32Array(len);
-song.tracks.forEach(tr=>tr.events.forEach(ev=>{let start=Math.floor(ev.t*60/song.bpm*sr),dur=Math.min(len-start,Math.floor(ev.d*60/song.bpm*sr));if(dur<=0)return;let hz=noteHz(ev.n);for(let i=0;i<dur;i++){let t=i/sr,env=Math.min(1,t/.025)*Math.min(1,(dur-i)/(sr*.12));let wave=tr.inst==='percussion'?Math.sin(2*Math.PI*(hz*Math.exp(-t*22))*t):tr.inst==='strings'||tr.inst==='pad'?(Math.sin(2*Math.PI*hz*t)+.25*Math.sin(4*Math.PI*hz*t))*.8:tr.inst==='bell'?Math.sin(2*Math.PI*hz*t)*Math.exp(-t*3):Math.sin(2*Math.PI*hz*t);mix[start+i]+=wave*env*ev.v*2.5}}));
-let peak=0;for(let x of mix)peak=Math.max(peak,Math.abs(x));let buf=new ArrayBuffer(44+len*2),v=new DataView(buf);const str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+len*2,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,len*2,true);for(let i=0;i<len;i++){let x=mix[i]/Math.max(1,peak*1.02);v.setInt16(44+i*2,Math.max(-1,Math.min(1,x))*32767,true)}return new Blob([buf],{type:'audio/wav'})
+async function renderWav(){
+ if(!song)throw Error('请先生成音乐');
+ const sr=44100,len=Math.ceil(song.duration*sr);
+ const Offline=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+ if(!Offline)throw Error('当前设备不支持离线音频渲染');
+ const c=new Offline(1,len,sr);master=c.createGain();master.gain.value=.82;master.connect(c.destination);
+ song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));
+ const rendered=await c.startRendering(),samples=rendered.getChannelData(0);
+ const buf=new ArrayBuffer(44+len*2),v=new DataView(buf);
+ const str=(o,x)=>{for(let i=0;i<x.length;i++)v.setUint8(o+i,x.charCodeAt(i))};
+ str(0,'RIFF');v.setUint32(4,36+len*2,true);str(8,'WAVE');str(12,'fmt ');
+ v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+ v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);
+ str(36,'data');v.setUint32(40,len*2,true);
+ for(let i=0;i<len;i++){const x=Math.max(-1,Math.min(1,samples[i]));v.setInt16(44+i*2,x*32767,true)}
+ return new Blob([buf],{type:'audio/wav'});
 }
 function exportBlob(blob,name){let a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)}
 function saveBlob(blob,name){if(window.AndroidBridge){let reader=new FileReader();reader.onload=()=>AndroidBridge.saveFile(reader.result.split(',')[1],blob.type,name);reader.readAsDataURL(blob)}else exportBlob(blob,name)}
