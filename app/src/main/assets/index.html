@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#101525"><title>灵境·自动作曲</title>
+<style>
+:root{color-scheme:dark;--bg:#101525;--panel:#1a2438;--gold:#e8bd70;--muted:#9aa9c2;--line:#33425e}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#263452,#101525 65%);color:#f1f4fa;font:15px system-ui,"Noto Sans SC",sans-serif;padding:18px;max-width:760px;margin:auto}header{text-align:center;padding:16px 0 20px}h1{font-size:27px;letter-spacing:3px;margin:0;color:#f2d49b}header p{color:var(--muted);margin:8px 0 0}.panel{background:#1a2438eF;border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0;box-shadow:0 10px 28px #0003}label{display:block;color:#c6d1e2;font-size:13px;margin:0 0 8px}textarea,select,input{width:100%;border:1px solid #43516b;background:#111b2c;color:white;border-radius:10px;padding:12px;font:inherit}textarea{min-height:94px;resize:vertical}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.instruments{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.inst{display:flex;align-items:center;gap:8px;background:#111b2c;border:1px solid #34425a;padding:9px;border-radius:9px;font-size:13px}.inst input{width:auto;accent-color:var(--gold)}button{border:0;border-radius:11px;padding:12px 14px;font-weight:700;font-size:14px;background:#34425b;color:white}button.primary{background:linear-gradient(135deg,#f1d69e,#c38e42);color:#1b1c22;font-size:16px;width:100%;padding:15px}button:active{transform:scale(.98)}.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.exports{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.status{color:#b7c8df;font-size:13px;min-height:20px;margin-top:10px}.meter{height:5px;background:#303d54;border-radius:5px;overflow:hidden;margin-top:10px}.meter span{display:block;height:100%;width:0;background:var(--gold);transition:width .2s}.small{font-size:12px;color:#91a2bd;line-height:1.6}.tag{display:inline-block;color:#f2d49b;border:1px solid #66563e;padding:3px 8px;border-radius:20px;font-size:11px;margin-right:5px}
+</style></head><body>
+<header><h1>灵境 · 自动作曲</h1><p>把文字意境，变成一段可以聆听的音乐</p></header>
+<section class="panel"><label for="prompt">描述你想要的意境</label><textarea id="prompt" placeholder="例如：清晨薄雾中的森林，阳光穿过树叶，宁静、温暖，带一点希望……">清晨薄雾中的森林，阳光穿过树叶，宁静、温暖，带一点希望。</textarea>
+<div class="grid" style="margin-top:12px"><div><label>音乐风格</label><select id="style"><option value="auto">由意境自动判断</option><option value="cinematic">电影配乐</option><option value="classical">古典</option><option value="ambient">氛围音乐</option><option value="folk">民谣</option><option value="electronic">电子</option></select></div><div><label>时长</label><select id="duration"><option value="20">约20秒</option><option value="35" selected>约35秒</option><option value="50">约50秒</option></select></div></div>
+<div class="grid" style="margin-top:12px"><div><label>速度</label><select id="tempo"><option value="auto">自动</option><option value="68">舒缓 · 68 BPM</option><option value="88">中速 · 88 BPM</option><option value="112">明快 · 112 BPM</option><option value="132">活跃 · 132 BPM</option></select></div><div><label>调性</label><select id="key"><option value="auto">自动</option><option value="0">C 大调</option><option value="2">D 大调</option><option value="4">E 大调</option><option value="5">F 大调</option><option value="7">G 大调</option><option value="9">A 小调</option></select></div></div></section>
+<section class="panel"><label>选择演奏乐器（可多选）</label><div class="instruments" id="instruments">
+<label class="inst"><input type="checkbox" value="piano" checked> 钢琴</label><label class="inst"><input type="checkbox" value="strings" checked> 弦乐</label><label class="inst"><input type="checkbox" value="flute" checked> 长笛</label><label class="inst"><input type="checkbox" value="guitar"> 木吉他</label><label class="inst"><input type="checkbox" value="bass" checked> 低音</label><label class="inst"><input type="checkbox" value="bell"> 钟琴</label><label class="inst"><input type="checkbox" value="pad"> 合成铺底</label><label class="inst"><input type="checkbox" value="percussion"> 打击乐</label>
+</div></section>
+<section class="panel"><button class="primary" id="compose">✦ 根据意境生成音乐</button><div class="status" id="status">等待创作。算法作曲引擎可离线运行。</div><div class="meter"><span id="progress"></span></div><div class="controls"><button id="play">▶ 播放</button><button id="pause">Ⅱ 暂停</button><button id="stop">■ 停止</button></div><div class="exports"><button id="wav">导出 WAV 音频</button><button id="midi">导出 MIDI 文件</button></div></section>
+<section class="panel"><div><span class="tag">离线算法引擎</span><span class="tag">多声部编曲</span><span class="tag">Web Audio</span></div><p class="small">当前版本使用本地算法生成旋律、和弦、低音与节奏；无需注册或联网。AI 音乐服务接口预留，接入时应通过安全的服务端代理配置密钥。当前首版导出 WAV 与 MIDI；MP3 编码将在后续版本加入。</p></section>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);let song=null,ctx=null,active=[],startedAt=0,pausedAt=0,playing=false,master=null;
+const scales={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10],pent:[0,2,4,7,9]};
+function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
+function rng(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}}
+function noteHz(n){return 440*Math.pow(2,(n-69)/12)}
+function compose(){
+const prompt=$('prompt').value.trim();if(!prompt){$('status').textContent='请先输入一段意境描述。';return}
+const seed=hash(prompt),r=rng(seed),txt=prompt.toLowerCase();let mood='calm';
+if(/悲|忧|孤独|夜|雨|离别|sad|dark/.test(txt))mood='sad';else if(/欢快|热闹|奔跑|庆祝|快乐|bright|joy/.test(txt))mood='happy';else if(/神秘|星空|梦|空灵|奇幻|myst/.test(txt))mood='mystic';else if(/壮阔|史诗|山河|英雄|宏大/.test(txt))mood='epic';
+const bpm=$('tempo').value==='auto'?({calm:76,sad:68,happy:116,mystic:82,epic:96}[mood]):Number($('tempo').value);
+const dur=Number($('duration').value),steps=Math.ceil(dur*bpm/60*2),base=$('key').value==='auto'?Math.floor(r()*12):Number($('key').value);
+const minor=mood==='sad'||mood==='mystic',sc=minor?scales.minor:scales.major;
+const progression=minor?[0,5,3,6]:[0,4,5,3],chords=[];
+for(let i=0;i<Math.ceil(steps/8);i++)chords.push(progression[i%4]);
+const tracks=[];
+const add=(inst,events)=>tracks.push({inst,events});
+const selected=[...document.querySelectorAll('#instruments input:checked')].map(x=>x.value);
+if(!selected.length){$('status').textContent='至少选择一种乐器。';return}
+if(selected.includes('piano')){let e=[];for(let s=0;s<steps;s+=2){let c=chords[Math.floor(s/8)]||0;for(let k of [0,2,4])e.push({n:48+base+c+sc[k],t:s*.5,d:.85,v:.12})}add('piano',e)}
+if(selected.includes('strings')){let e=[];for(let s=0;s<steps;s+=8){let c=chords[Math.floor(s/8)]||0;e.push({n:60+base+c+sc[2],t:s*.5,d:3.7,v:.095})}add('strings',e)}
+if(selected.includes('flute')||selected.includes('bell')){let e=[];let pos=0;while(pos<steps){let degree=Math.floor(r()*sc.length),oct=mood==='epic'?12:12;e.push({n:72+base+sc[degree]+oct*(r()>.84?1:0),t:pos*.5,d:.35+r()*.45,v:.12});pos+=r()>.72?2:1}if(selected.includes('flute'))add('flute',e);else add('bell',e)}
+if(selected.includes('guitar')){let e=[];for(let s=0;s<steps;s+=2){let c=chords[Math.floor(s/8)]||0;e.push({n:55+base+c+sc[Math.floor(r()*3)],t:s*.5,d:.42,v:.10})}add('guitar',e)}
+if(selected.includes('bass')){let e=[];for(let s=0;s<steps;s+=4){let c=chords[Math.floor(s/8)]||0;e.push({n:36+base+c,t:s*.5,d:1.6,v:.16})}add('bass',e)}
+if(selected.includes('pad')){let e=[];for(let s=0;s<steps;s+=8){let c=chords[Math.floor(s/8)]||0;for(let k of [0,2,4])e.push({n:48+base+c+sc[k],t:s*.5,d:3.8,v:.045})}add('pad',e)}
+if(selected.includes('percussion')){let e=[];for(let s=0;s<steps;s+=2)e.push({n:s%8===0?36: s%4===2?38:42,t:s*.5,d:.12,v:.10});add('percussion',e)}
+song={tracks,bpm,duration:steps*.5*60/bpm,seed,mood,base};$('status').textContent='创作完成：'+({calm:'宁静',sad:'忧郁',happy:'明快',mystic:'空灵',epic:'恢弘'}[mood])+' · '+bpm+' BPM · '+tracks.length+' 个声部';$('progress').style.width='100%';stop();
+}
+function setup(){if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();return ctx}
+function voice(c,inst,n,t,d,v){
+if(inst==='percussion'){let o=c.createOscillator(),g=c.createGain();o.type='triangle';o.frequency.setValueAtTime(n===36?95:n===38?180:650,t);o.frequency.exponentialRampToValueAtTime(35,t+.09);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);o.connect(g);g.connect(master||c.destination);o.start(t);o.stop(t+.13);return}
+let o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();o.type=inst==='flute'?'sine':inst==='strings'||inst==='pad'?'sawtooth':inst==='bell'?'sine':inst==='guitar'?'triangle':'triangle';o.frequency.value=noteHz(n);f.type='lowpass';f.frequency.value=inst==='pad'?1300:inst==='strings'?2200:inst==='flute'?3000:5000;g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(v,t+.035);g.gain.setTargetAtTime(v*.65,t+.06,inst==='strings'||inst==='pad'?.35:.08);g.gain.setTargetAtTime(.001,t+Math.max(.08,d-.1),.12);o.connect(f);f.connect(g);g.connect(master||c.destination);o.start(t);o.stop(t+d+.3);
+}
+function stop(){active.forEach(x=>{try{x.stop()}catch(e){}});active=[];playing=false;pausedAt=0;$('progress').style.width='0%'}
+function play(){if(!song){$('status').textContent='请先生成音乐。';return}stop();let c=setup();master=c.createGain();master.gain.value=.75;master.connect(c.destination);let start=c.currentTime+.08; song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=Date.now();$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
+function pause(){if(playing){stop();$('status').textContent='播放已暂停（点击播放可从头开始）。'}}
+function renderWav(){
+if(!song)return Promise.reject(Error('请先生成音乐'));const sr=44100,len=Math.ceil(song.duration*sr),mix=new Float32Array(len);
+song.tracks.forEach(tr=>tr.events.forEach(ev=>{let start=Math.floor(ev.t*60/song.bpm*sr),dur=Math.min(len-start,Math.floor(ev.d*60/song.bpm*sr));if(dur<=0)return;let hz=noteHz(ev.n);for(let i=0;i<dur;i++){let t=i/sr,env=Math.min(1,t/.025)*Math.min(1,(dur-i)/(sr*.12));let wave=tr.inst==='percussion'?Math.sin(2*Math.PI*(hz*Math.exp(-t*22))*t):tr.inst==='strings'||tr.inst==='pad'?(Math.sin(2*Math.PI*hz*t)+.25*Math.sin(4*Math.PI*hz*t))*.8:tr.inst==='bell'?Math.sin(2*Math.PI*hz*t)*Math.exp(-t*3):Math.sin(2*Math.PI*hz*t);mix[start+i]+=wave*env*ev.v*2.5}}));
+let peak=0;for(let x of mix)peak=Math.max(peak,Math.abs(x));let buf=new ArrayBuffer(44+len*2),v=new DataView(buf);const str=(o,s)=>{for(let i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i))};str(0,'RIFF');v.setUint32(4,36+len*2,true);str(8,'WAVE');str(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);str(36,'data');v.setUint32(40,len*2,true);for(let i=0;i<len;i++){let x=mix[i]/Math.max(1,peak*1.02);v.setInt16(44+i*2,Math.max(-1,Math.min(1,x))*32767,true)}return new Blob([buf],{type:'audio/wav'})
+}
+function exportBlob(blob,name){let a=document.createElement('a'),url=URL.createObjectURL(blob);a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000)}
+function saveBlob(blob,name){if(window.AndroidBridge){let reader=new FileReader();reader.onload=()=>AndroidBridge.saveFile(reader.result.split(',')[1],blob.type,name);reader.readAsDataURL(blob)}else exportBlob(blob,name)}
+function midi(){
+if(!song)return null;let ev=[];const ppq=480,tempo=Math.round(60000000/song.bpm);function vlq(n){let b=[n&127];while((n>>=7)){b.unshift((n&127)|128)}return b}
+song.tracks.forEach((tr,ch)=>{let channel=ch%9;tr.events.forEach(e=>{let t=Math.round(e.t*ppq*2),end=t+Math.max(40,Math.round(e.d*ppq*2));ev.push({t,bytes:[0x90|channel,e.n,Math.round(e.v*500)]},{t:end,bytes:[0x80|channel,e.n,0]})})});
+let chunks=[];function u32(n){return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255]}function chunk(id,data){return[...id.split('').map(x=>x.charCodeAt(0)),...u32(data.length),...data]}
+let header=chunk('MThd',[0,1,0,1,1,224]);let track=[0,255,81,3,(tempo>>16)&255,(tempo>>8)&255,tempo&255];ev.sort((a,b)=>a.t-b.t);let last=0;ev.forEach(e=>{track.push(...vlq(e.t-last),...e.bytes);last=e.t});track.push(0,255,47,0);let data=new Uint8Array([...header,...chunk('MTrk',track)]);return new Blob([data],{type:'audio/midi'})
+}
+$('compose').onclick=compose;$('play').onclick=play;$('pause').onclick=pause;$('stop').onclick=()=>{stop();$('status').textContent='已停止。'};
+$('wav').onclick=async()=>{try{$('status').textContent='正在渲染 WAV…';let b=await renderWav();saveBlob(b,'lingjing-composition.wav');$('status').textContent='WAV 文件已生成。'}catch(e){$('status').textContent=e.message}};
+$('midi').onclick=()=>{let b=midi();if(!b){$('status').textContent='请先生成音乐。';return}saveBlob(b,'lingjing-composition.mid');$('status').textContent='MIDI 文件已生成。'};
+})();
+</script></body></html>
