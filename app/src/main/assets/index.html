@@ -90,15 +90,30 @@ function voice(c,inst,n,t,d,v){
   g.setTargetAtTime(.0001,t+Math.max(attack,d-release),Math.max(.035,release));
  }
 }
-function stop(){active.forEach(x=>{try{x.stop()}catch(e){}try{x.disconnect()}catch(e){}});active=[];playing=false;paused=false;pausedAt=0;if(ctx&&ctx.state==='suspended')ctx.resume();$('progress').style.width='0%'}
-function play(){if(!song){$('status').textContent='请先生成音乐。';return}if(paused&&ctx){ctx.resume().then(()=>{paused=false;playing=true;$('status').textContent='继续播放'});return}stop();let c=setup();master=c.createGain();master.gain.value=.75;master.connect(c.destination);let start=c.currentTime+.08;song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=c.currentTime;$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
+function makeMaster(c,level){
+ const gain=c.createGain(),comp=c.createDynamicsCompressor();
+ gain.gain.value=level;
+ comp.threshold.value=-18;comp.knee.value=18;comp.ratio.value=12;
+ comp.attack.value=.003;comp.release.value=.18;
+ gain.connect(comp);comp.connect(c.destination);return gain;
+}
+function stop(){
+ const now=ctx?ctx.currentTime:0,old=active.slice();
+ if(master&&ctx){try{master.gain.cancelScheduledValues(now);master.gain.setValueAtTime(Math.max(.0001,master.gain.value),now);master.gain.linearRampToValueAtTime(.0001,now+.018)}catch(e){}}
+ old.forEach(x=>{try{x.stop(now+.02)}catch(e){}});
+ active=[];playing=false;paused=false;pausedAt=0;
+ setTimeout(()=>old.forEach(x=>{try{x.disconnect()}catch(e){}}),30);
+ if(ctx&&ctx.state==='suspended')ctx.resume();
+ $('progress').style.width='0%';
+}
+function play(){if(!song){$('status').textContent='请先生成音乐。';return}if(paused&&ctx){ctx.resume().then(()=>{paused=false;playing=true;$('status').textContent='继续播放'});return}stop();let c=setup();master=makeMaster(c,.42);let start=c.currentTime+.08;song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=c.currentTime;$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
 function pause(){if(playing&&ctx){ctx.suspend().then(()=>{playing=false;paused=true;$('status').textContent='已暂停。点击“播放”可从暂停位置继续。'})}}
 async function renderWav(){
  if(!song)throw Error('请先生成音乐');
  const sr=44100,len=Math.ceil(song.duration*sr);
  const Offline=window.OfflineAudioContext||window.webkitOfflineAudioContext;
  if(!Offline)throw Error('当前设备不支持离线音频渲染');
- const c=new Offline(1,len,sr);master=c.createGain();master.gain.value=.82;master.connect(c.destination);
+ const c=new Offline(1,len,sr);master=makeMaster(c,.48);
  song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));
  const rendered=await c.startRendering(),samples=rendered.getChannelData(0);
  const buf=new ArrayBuffer(44+len*2),v=new DataView(buf);
