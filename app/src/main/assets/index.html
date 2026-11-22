@@ -14,7 +14,7 @@
 <section class="panel"><div><span class="tag">离线算法引擎</span><span class="tag">多声部编曲</span><span class="tag">Web Audio</span></div><p class="small">当前版本使用本地算法生成旋律、和弦、低音与节奏；无需注册或联网。AI 音乐服务接口预留，接入时应通过安全的服务端代理配置密钥。当前首版导出 WAV 与 MIDI；MP3 编码将在后续版本加入。</p></section>
 <script>
 (()=>{
-const $=id=>document.getElementById(id);let song=null,ctx=null,active=[],startedAt=0,pausedAt=0,playing=false,master=null;
+const $=id=>document.getElementById(id);let song=null,ctx=null,active=[],startedAt=0,pausedAt=0,playing=false,paused=false,master=null;
 const scales={major:[0,2,4,5,7,9,11],minor:[0,2,3,5,7,8,10],pent:[0,2,4,7,9]};
 function hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0}
 function rng(seed){return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}}
@@ -50,7 +50,7 @@ function voice(c,inst,n,t,d,v){
   o.frequency.exponentialRampToValueAtTime(38,t+.075);
   g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(v,t+.003);
   g.gain.exponentialRampToValueAtTime(.0001,t+.105);
-  o.connect(g);g.connect(out);o.start(t);o.stop(t+.11);return;
+  o.connect(g);g.connect(out);active.push(o);o.onended=()=>{active=active.filter(x=>x!==o)};o.start(t);o.stop(t+.11);return;
  }
  const bus=c.createGain(),filter=c.createBiquadFilter();
  filter.type='lowpass';filter.frequency.setValueAtTime(
@@ -59,7 +59,7 @@ function voice(c,inst,n,t,d,v){
  const add=(ratio,level,type='sine',detune=0)=>{
   const o=c.createOscillator(),g=c.createGain();
   o.type=type;o.frequency.setValueAtTime(hz*ratio,t);o.detune.setValueAtTime(detune,t);
-  g.gain.value=level;o.connect(g);g.connect(bus);o.start(t);o.stop(t+d+.08);
+  g.gain.value=level;o.connect(g);g.connect(bus);active.push(o);o.onended=()=>{active=active.filter(x=>x!==o)};o.start(t);o.stop(t+d+.08);
  };
  let attack=.012,release=.06,peak=v,decay=.2;
  if(inst==='piano'){
@@ -90,9 +90,9 @@ function voice(c,inst,n,t,d,v){
   g.setTargetAtTime(.0001,t+Math.max(attack,d-release),Math.max(.035,release));
  }
 }
-function stop(){active.forEach(x=>{try{x.stop()}catch(e){}});active=[];playing=false;pausedAt=0;$('progress').style.width='0%'}
-function play(){if(!song){$('status').textContent='请先生成音乐。';return}stop();let c=setup();master=c.createGain();master.gain.value=.75;master.connect(c.destination);let start=c.currentTime+.08; song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=Date.now();$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
-function pause(){if(playing){stop();$('status').textContent='播放已暂停（点击播放可从头开始）。'}}
+function stop(){active.forEach(x=>{try{x.stop()}catch(e){}try{x.disconnect()}catch(e){}});active=[];playing=false;paused=false;pausedAt=0;if(ctx&&ctx.state==='suspended')ctx.resume();$('progress').style.width='0%'}
+function play(){if(!song){$('status').textContent='请先生成音乐。';return}if(paused&&ctx){ctx.resume().then(()=>{paused=false;playing=true;$('status').textContent='继续播放'});return}stop();let c=setup();master=c.createGain();master.gain.value=.75;master.connect(c.destination);let start=c.currentTime+.08;song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=c.currentTime;$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
+function pause(){if(playing&&ctx){ctx.suspend().then(()=>{playing=false;paused=true;$('status').textContent='已暂停。点击“播放”可从暂停位置继续。'})}}
 async function renderWav(){
  if(!song)throw Error('请先生成音乐');
  const sr=44100,len=Math.ceil(song.duration*sr);
