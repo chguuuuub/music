@@ -43,8 +43,52 @@ song={tracks,bpm,duration:steps*.5*60/bpm,seed,mood,base};$('status').textConten
 }
 function setup(){if(!ctx)ctx=new(window.AudioContext||window.webkitAudioContext)();if(ctx.state==='suspended')ctx.resume();return ctx}
 function voice(c,inst,n,t,d,v){
-if(inst==='percussion'){let o=c.createOscillator(),g=c.createGain();o.type='triangle';o.frequency.setValueAtTime(n===36?95:n===38?180:650,t);o.frequency.exponentialRampToValueAtTime(35,t+.09);g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);o.connect(g);g.connect(master||c.destination);o.start(t);o.stop(t+.13);return}
-let o=c.createOscillator(),g=c.createGain(),f=c.createBiquadFilter();o.type=inst==='flute'?'sine':inst==='strings'||inst==='pad'?'sawtooth':inst==='bell'?'sine':inst==='guitar'?'triangle':'triangle';o.frequency.value=noteHz(n);f.type='lowpass';f.frequency.value=inst==='pad'?1300:inst==='strings'?2200:inst==='flute'?3000:5000;g.gain.setValueAtTime(.001,t);g.gain.linearRampToValueAtTime(v,t+.035);g.gain.setTargetAtTime(v*.65,t+.06,inst==='strings'||inst==='pad'?.35:.08);g.gain.setTargetAtTime(.001,t+Math.max(.08,d-.1),.12);o.connect(f);f.connect(g);g.connect(master||c.destination);o.start(t);o.stop(t+d+.3);
+ const hz=noteHz(n),out=master||c.destination;
+ if(inst==='percussion'){
+  const o=c.createOscillator(),g=c.createGain();
+  o.type='triangle';o.frequency.setValueAtTime(n===36?105:n===38?190:720,t);
+  o.frequency.exponentialRampToValueAtTime(38,t+.075);
+  g.gain.setValueAtTime(.0001,t);g.gain.linearRampToValueAtTime(v,t+.003);
+  g.gain.exponentialRampToValueAtTime(.0001,t+.105);
+  o.connect(g);g.connect(out);o.start(t);o.stop(t+.11);return;
+ }
+ const bus=c.createGain(),filter=c.createBiquadFilter();
+ filter.type='lowpass';filter.frequency.setValueAtTime(
+  inst==='piano'?7800:inst==='flute'?4200:inst==='strings'?3600:inst==='guitar'?6200:inst==='bass'?900:inst==='pad'?1800:9000,t);
+ bus.connect(filter);filter.connect(out);
+ const add=(ratio,level,type='sine',detune=0)=>{
+  const o=c.createOscillator(),g=c.createGain();
+  o.type=type;o.frequency.setValueAtTime(hz*ratio,t);o.detune.setValueAtTime(detune,t);
+  g.gain.value=level;o.connect(g);g.connect(bus);o.start(t);o.stop(t+d+.08);
+ };
+ let attack=.012,release=.06,peak=v,decay=.2;
+ if(inst==='piano'){
+  // Hammer-like attack and rapidly decaying, slightly inharmonic partials.
+  add(1,1,'sine');add(2.01,.43);add(3.98,.19);add(6.03,.075);
+  attack=.004;decay=Math.min(.42,Math.max(.16,d*.42));release=.045;
+ }else if(inst==='strings'){
+  add(1,.72,'sawtooth',-4);add(1.003,.28,'sawtooth',4);attack=.16;decay=d*.72;release=.22;peak=v*.62;
+ }else if(inst==='flute'){
+  add(1,.88);add(2,.10);add(3,.025);attack=.035;decay=d*.8;release=.10;peak=v*.85;
+ }else if(inst==='guitar'){
+  add(1,.72,'triangle');add(2,.24);add(3,.10);add(4,.035);attack=.003;decay=Math.min(.34,d*.35);release=.045;
+ }else if(inst==='bass'){
+  add(1,.78,'triangle');add(2,.16);attack=.008;decay=d*.78;release=.09;
+ }else if(inst==='bell'){
+  add(1,.70);add(2.76,.22);add(5.4,.08);attack=.002;decay=Math.min(1.8,d*.85);release=.18;
+ }else if(inst==='pad'){
+  add(1,.58,'sawtooth',-7);add(1.005,.42,'sawtooth',7);attack=.42;decay=d*.7;release=.32;peak=v*.5;
+ }
+ const g=bus.gain;
+ g.setValueAtTime(.0001,t);
+ g.linearRampToValueAtTime(peak,t+attack);
+ if(inst==='piano'||inst==='guitar'||inst==='bell'){
+  g.exponentialRampToValueAtTime(Math.max(.0001,peak*.30),t+Math.max(attack+.01,decay));
+  g.exponentialRampToValueAtTime(.0001,t+d+release);
+ }else{
+  g.setTargetAtTime(peak*.82,t+attack,Math.max(.025,decay*.22));
+  g.setTargetAtTime(.0001,t+Math.max(attack,d-release),Math.max(.035,release));
+ }
 }
 function stop(){active.forEach(x=>{try{x.stop()}catch(e){}});active=[];playing=false;pausedAt=0;$('progress').style.width='0%'}
 function play(){if(!song){$('status').textContent='请先生成音乐。';return}stop();let c=setup();master=c.createGain();master.gain.value=.75;master.connect(c.destination);let start=c.currentTime+.08; song.tracks.forEach(tr=>tr.events.forEach(ev=>voice(c,tr.inst,ev.n,start+ev.t*60/song.bpm,ev.d*60/song.bpm,ev.v)));playing=true;startedAt=Date.now();$('status').textContent='正在播放 · '+song.duration.toFixed(1)+' 秒'}
